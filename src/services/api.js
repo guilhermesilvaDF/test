@@ -38,16 +38,8 @@ const handleResponse = async (request) => {
 export const userAPI = {
     getCurrentUser: () => handleResponse(api.get('/auth/me')),
 
-    signup: async (name, email, password) => {
-        const res = await handleResponse(api.post('/auth/signup', { name, email, password }));
-        if (res.success && res.data.token) {
-            localStorage.setItem('auth_token', res.data.token);
-        }
-        return res;
-    },
-
-    login: async (email, password) => {
-        const res = await handleResponse(api.post('/auth/login', { email, password }));
+    verifySpotifyToken: async (accessToken) => {
+        const res = await handleResponse(api.post('/auth/spotify', { accessToken }));
         if (res.success && res.data.token) {
             localStorage.setItem('auth_token', res.data.token);
         }

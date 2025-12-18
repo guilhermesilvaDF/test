@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { GoogleGenAI } from "@google/genai";
 import lastfmRoutes from './routes/lastfm.js';
@@ -46,53 +45,73 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });
 });
 
-// Auth: Signup
-app.post('/api/auth/signup', async (req, res) => {
+// Auth: Spotify Login
+app.post('/api/auth/spotify', async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { accessToken } = req.body;
         
-        const existingUser = await prisma.user.findUnique({ where: { email } });
-        if (existingUser) {
-            return res.status(400).json({ message: 'User already exists' });
+        if (!accessToken) {
+            return res.status(400).json({ message: 'Access token required' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const user = await prisma.user.create({
-            data: {
-                name,
-                email,
-                password: hashedPassword
-            }
+        // 1. Verify token with Spotify
+        const spotifyResponse = await fetch('https://api.spotify.com/v1/me', {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
         });
 
-        const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET);
-        res.json({ user: { id: user.id, name: user.name, email: user.email }, token });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error creating user' });
-    }
-});
+        if (!spotifyResponse.ok) {
+            return res.status(401).json({ message: 'Invalid Spotify token' });
+        }
 
-// Auth: Login
-app.post('/api/auth/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
+        const spotifyUser = await spotifyResponse.json();
         
-        const user = await prisma.user.findUnique({ where: { email } });
+        // 2. Find or Create User
+        let user = await prisma.user.findUnique({
+            where: { spotifyId: spotifyUser.id }
+        });
+
         if (!user) {
-            return res.status(400).json({ message: 'User not found' });
+            user = await prisma.user.create({
+                data: {
+                    spotifyId: spotifyUser.id,
+                    name: spotifyUser.display_name || 'Spotify User',
+                    email: spotifyUser.email || `no-email-${spotifyUser.id}@spotify.com`,
+                    image: spotifyUser.images?.[0]?.url || null
+                }
+            });
+        } else {
+            // Update profile info if changed
+            user = await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    name: spotifyUser.display_name || user.name,
+                    image: spotifyUser.images?.[0]?.url || user.image,
+                    email: spotifyUser.email || user.email
+                }
+            });
         }
 
-        const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) {
-            return res.status(400).json({ message: 'Invalid credentials' });
-        }
+        // 3. Issue App JWT
+        const token = jwt.sign(
+            { id: user.id, spotifyId: user.spotifyId },
+            JWT_SECRET,
+            { expiresIn: '7d' } // Longer session for app
+        );
 
-        const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET);
-        res.json({ user: { id: user.id, name: user.name, email: user.email }, token });
+        res.json({ 
+            user: { 
+                id: user.id, 
+                name: user.name, 
+                email: user.email, 
+                image: user.image,
+                spotifyId: user.spotifyId 
+            }, 
+            token 
+        });
+
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error logging in' });
+        console.error('Spotify Auth Error:', error);
+        res.status(500).json({ message: 'Error during authentication' });
     }
 });
 

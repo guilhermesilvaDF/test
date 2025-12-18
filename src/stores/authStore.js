@@ -112,46 +112,6 @@ const useAuthStore = create((set, get) => ({
         });
     },
 
-    // Local signup - INTEGRADO COM BACKEND
-    signupLocal: async (name, email, password = '') => {
-        try {
-            const response = await userAPI.signup(name, email, password);
-            if (response.success && response.data) {
-                set({
-                    user: response.data.user,
-                    isAuthenticated: true,
-                    authType: 'local',
-                    isLoading: false
-                });
-                return response.data.user;
-            }
-            throw new Error(response.message || 'Erro ao criar conta');
-        } catch (error) {
-            console.error('Signup error:', error);
-            throw error;
-        }
-    },
-
-    // Local login - INTEGRADO COM BACKEND
-    loginLocal: async (email, password = '') => {
-        try {
-            const response = await userAPI.login(email, password);
-            if (response.success && response.data) {
-                set({
-                    user: response.data.user,
-                    isAuthenticated: true,
-                    authType: 'local',
-                    isLoading: false
-                });
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.error('Login error:', error);
-            return false;
-        }
-    },
-
     // Spotify login
     loginSpotify: async () => {
         const authUrl = await spotifyService.getAuthUrl();
@@ -177,76 +137,59 @@ const useAuthStore = create((set, get) => ({
     // Handle Spotify callback
     handleCallback: async () => {
         console.log('[AuthStore] Handling Spotify callback...');
-        const token = await spotifyService.handleCallback();
+        const spotifyToken = await spotifyService.handleCallback();
 
-        if (token) {
-            console.log('[AuthStore] Token received, updating state...');
-            set({ token, spotifyConnected: true });
+        if (spotifyToken) {
+            console.log('[AuthStore] Spotify Token received. Authenticating with Backend...');
+            
+            try {
+                // Exchange Spotify Token for App Session
+                const response = await userAPI.verifySpotifyToken(spotifyToken);
+                
+                if (response.success && response.data) {
+                    const { user, token } = response.data;
+                    
+                    set({
+                        token: spotifyToken, // Keep spotify token for playback
+                        user: user,          // Backend user data
+                        isAuthenticated: true,
+                        authType: 'spotify',
+                        spotifyConnected: true,
+                        spotifyUserId: user.spotifyId,
+                        isLoading: false
+                    });
 
-            useGamificationStore.getState().trackSpotifyConnected();
-
-            if (!get().user) {
-                console.log('[AuthStore] No local user, creating from Spotify data...');
-                await get().fetchSpotifyUser(true);
-            } else {
-                console.log('[AuthStore] Local user exists, just updating Spotify connection...');
-                await get().fetchSpotifyUser(false);
+                    localStorage.setItem('spotify_user_id', user.spotifyId);
+                    useGamificationStore.getState().trackSpotifyConnected();
+                    
+                    return { success: true, message: 'Login realizado com sucesso!' };
+                } else {
+                    throw new Error(response.message || 'Falha na autenticação com o servidor');
+                }
+            } catch (error) {
+                console.error('[AuthStore] Backend auth failed:', error);
+                return { 
+                    success: false, 
+                    error: 'backend_error',
+                    message: 'Erro ao conectar com o servidor. Tente novamente.' 
+                };
             }
-
-            return {
-                success: true,
-                message: 'Spotify conectado com sucesso!'
-            };
         }
 
         console.error('[AuthStore] Failed to get token from callback URL');
         return {
             success: false,
             error: 'token_missing',
-            message: 'Não foi possível obter o token de autenticação. Tente novamente.'
+            message: 'Não foi possível obter o token de autenticação.'
         };
     },
 
-    // Fetch Spotify user profile
-    fetchSpotifyUser: async (createLocalUser = false) => {
+    // Fetch Spotify user profile (Legacy/Optional now since backend handles it)
+    fetchSpotifyUser: async () => {
+        // Keeps local store in sync if needed, but primary source is now backend user
         try {
             const spotifyUser = await spotifyService.getUserProfile();
-
-            localStorage.setItem('spotify_user_id', spotifyUser.id);
             set({ spotifyUserId: spotifyUser.id });
-
-            if (createLocalUser) {
-                // Criar usuário no backend a partir dos dados do Spotify
-                try {
-                    const response = await userAPI.signup(
-                        spotifyUser.display_name,
-                        spotifyUser.email
-                    );
-                    if (response.success && response.data) {
-                        set({
-                            user: response.data.user,
-                            isAuthenticated: true,
-                            authType: 'spotify',
-                            spotifyConnected: true,
-                            isLoading: false
-                        });
-                    }
-                } catch (error) {
-                    // Se o usuário já existe, tenta fazer login
-                    const loginResponse = await userAPI.login(spotifyUser.email);
-                    if (loginResponse.success && loginResponse.data) {
-                        set({
-                            user: loginResponse.data.user,
-                            isAuthenticated: true,
-                            authType: 'spotify',
-                            spotifyConnected: true,
-                            isLoading: false
-                        });
-                    }
-                }
-            } else {
-                set({ isLoading: false });
-            }
         } catch (error) {
             console.error('Error fetching Spotify user:', error);
         }
