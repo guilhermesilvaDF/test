@@ -76,19 +76,17 @@ npx prisma db push
 
 ### 5. Executar o Projeto
 
-Você precisará de dois terminais:
+Agora você pode iniciar o Backend e o Frontend com um único comando:
 
-**Terminal 1 (Backend):**
 ```bash
-npm run server
+npm start
 ```
 
-**Terminal 2 (Frontend):**
-```bash
-npm run dev
-```
+Isso iniciará:
+- **Backend:** `http://localhost:3001`
+- **Frontend:** `http://localhost:5173`
 
-A aplicação estará disponível em: `http://localhost:5173`
+*(Se preferir rodar separadamente, use `npm run server` e `npm run dev` em terminais diferentes)*
 
 ## 🏗️ Estrutura do Projeto
 
