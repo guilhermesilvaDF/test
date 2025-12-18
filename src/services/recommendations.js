@@ -402,7 +402,8 @@ class RecommendationService {
                     album: track.album || 'Unknown Album',
                     imageUrl: this.getLastFmImage(track) || '/default-album.png',
                     listeners: parseInt(track.listeners || track.playcount || 0),
-                    previewUrl: null
+                    previewUrl: null,
+                    reason: track.reason // PRESERVE THE AI REASON HERE
                 };
 
                 let finalTrack = baseTrack;

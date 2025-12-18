@@ -1071,13 +1071,8 @@ export default function ForYou() {
                                     </h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                         {recommendations.tracks.slice(0, 12).map((track, index) => (
-                                            <div key={track.id || index} className="group">
+                                            <div key={track.id || index}>
                                                 <TrackListItem track={track} index={index} />
-                                                {track.reason && (
-                                                    <p className="text-xs text-gray-500 ml-14 -mt-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        💡 {track.reason}
-                                                    </p>
-                                                )}
                                             </div>
                                         ))}
                                     </div>

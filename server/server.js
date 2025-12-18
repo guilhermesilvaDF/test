@@ -223,43 +223,113 @@ app.post('/api/recommendations/generate', authenticateToken, async (req, res) =>
             Use this context to influence the vibe of the recommendations while strictly following the user's prompt.`;
         }
 
-        const response = await genAI.models.generateContent({
-            model: 'gemini-2.0-flash',
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: 'ARRAY',
-                    items: {
-                        type: 'OBJECT',
-                        properties: {
-                            name: { type: 'STRING' },
-                            artist: { type: 'STRING' },
-                            reason: { type: 'STRING' }
-                        }
-                    }
-                }
-            },
-            contents: [
-                {
-                    role: 'user',
-                    parts: [
-                        {
-                            text: `Act as a music expert DJ. Based on the following prompt, suggest ${limit} song recommendations: "${prompt}".${contextPrompt}
-                            
-                            Provide a brief 3-5 word reason for each recommendation.`
-                        }
-                    ]
-                }
-            ]
-        });
+                const response = await genAI.models.generateContent({
 
-        const recommendations = JSON.parse(response.data.candidates[0].content.parts[0].text);
-        res.json(recommendations);
-    } catch (error) {
-        console.error('Gemini AI Error:', error);
-        res.status(500).json({ message: 'Error generating recommendations' });
-    }
-});
+                    model: 'gemini-2.0-flash',
+
+                    config: {
+
+                        responseMimeType: 'application/json',
+
+                        responseSchema: {
+
+                            type: 'ARRAY',
+
+                            items: {
+
+                                type: 'OBJECT',
+
+                                properties: {
+
+                                    name: { type: 'STRING' },
+
+                                    artist: { type: 'STRING' },
+
+                                    reason: { type: 'STRING' }
+
+                                }
+
+                            }
+
+                        }
+
+                    },
+
+                                contents: [
+
+                                    {
+
+                                        role: 'user',
+
+                                        parts: [
+
+                                            {
+
+                                                text: `Act as a music expert DJ. Based on the following prompt, suggest ${limit} song recommendations: "${prompt}".${contextPrompt}
+
+                                                
+
+                                                                            Rules:
+
+                                                
+
+                                                                            1. For the 'reason' field, describe the song's actual sound, mood, or instrumentals (e.g., "Sintetizadores sonhadores", "Riffs de guitarra agressivos", "Ritmo funk animado").
+
+                                                
+
+                                                                            2. Do NOT say "Because you liked..." or "Similar to...". Focus on the music itself.
+
+                                                
+
+                                                                            3. Keep the reason under 6 words.
+
+                                                
+
+                                                                            4. The reason MUST be in Portuguese.`
+
+                                            }
+
+                                        ]
+
+                                    }
+
+                                ]
+
+                });
+
+        
+
+                const candidates = response.response?.candidates || response.candidates;
+
+                
+
+                if (!candidates || !candidates[0] || !candidates[0].content) {
+
+                     console.error('Gemini Invalid Response (Recs):', JSON.stringify(response, null, 2));
+
+                     throw new Error('Invalid response from Gemini API');
+
+                }
+
+        
+
+                const text = candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+
+                const recommendations = JSON.parse(text);
+
+                
+
+                res.json(recommendations);
+
+            } catch (error) {
+
+                console.error('Gemini AI Error:', error);
+
+                res.status(500).json({ message: 'Error generating recommendations' });
+
+            }
+
+        });
 
 app.post('/api/ai/analyze', authenticateToken, async (req, res) => {
     if (!genAI) return res.status(503).json({ message: 'AI Service not configured' });
@@ -287,7 +357,23 @@ app.post('/api/ai/analyze', authenticateToken, async (req, res) => {
             }]
         });
 
-        const analysis = JSON.parse(response.data.candidates[0].content.parts[0].text);
+        // Debug logging
+        // console.log('Gemini Raw Response:', JSON.stringify(response, null, 2));
+
+        // Handle potential different response structures or missing candidates
+        const candidates = response.response?.candidates || response.candidates;
+
+        if (!candidates || !candidates[0] || !candidates[0].content) {
+            console.error('Gemini Invalid Response:', JSON.stringify(response, null, 2));
+            throw new Error('Invalid response from Gemini API');
+        }
+
+        let text = candidates[0].content.parts[0].text;
+        
+        // Sometimes structured output includes markdown blocks even if we asked not to
+        text = text.replace(/```json|```/g, '').trim();
+
+        const analysis = JSON.parse(text);
         res.json(analysis);
     } catch (error) {
         console.error('Gemini Analysis Error:', error);
@@ -310,7 +396,13 @@ app.post('/api/ai/describe-playlist', authenticateToken, async (req, res) => {
             }]
         });
 
-        res.json({ description: response.data.candidates[0].content.parts[0].text.trim() });
+        const candidates = response.response?.candidates || response.candidates;
+
+        if (!candidates || !candidates[0] || !candidates[0].content) {
+            throw new Error('Invalid response from Gemini API');
+        }
+
+        res.json({ description: candidates[0].content.parts[0].text.trim() });
     } catch (error) {
         console.error('Gemini Description Error:', error);
         res.status(500).json({ message: 'Error generating description' });

@@ -101,7 +101,12 @@ export default function TrackListItem({ track, index, compact = false }) {
                 <div className="flex-1 min-w-0">
                     <h4 className="text-white font-semibold truncate">{track.name}</h4>
                     <p className="text-dark-text-muted text-sm truncate">{track.artist}</p>
-                    {track.album && (
+                    {track.reason ? (
+                        <p className="text-accent-blue text-xs italic truncate mt-0.5">
+                            <i className="ph-fill ph-sparkle mr-1"></i>
+                            {track.reason}
+                        </p>
+                    ) : track.album && (
                         <p className="text-dark-text-muted text-xs truncate">{track.album}</p>
                     )}
                 </div>

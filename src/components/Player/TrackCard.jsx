@@ -74,7 +74,13 @@ function TrackCard({ track, onPlay }) {
             </div>
             <h4 className="text-lg font-bold text-white truncate">{track.name}</h4>
             <p className="text-sm text-gray-400 truncate">{track.artist}</p>
-            {track.album && (
+            {track.reason && (
+                <div className="mt-2 flex items-start gap-1.5">
+                    <i className="ph-fill ph-lightbulb text-yellow-500 mt-0.5 flex-shrink-0"></i>
+                    <p className="text-xs text-gray-400 italic leading-tight">{track.reason}</p>
+                </div>
+            )}
+            {track.album && !track.reason && (
                 <p className="text-xs text-gray-500 truncate mt-1">{track.album}</p>
             )}
         </div>
