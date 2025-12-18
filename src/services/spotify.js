@@ -67,19 +67,22 @@ class SpotifyService {
 
     // Handle the callback (exchange code for token)
     async handleCallback() {
+        console.log('[Spotify] Starting handleCallback...');
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
         const error = params.get('error');
 
         if (error) {
-            console.error('[Spotify] Auth Error:', error);
+            console.error('[Spotify] Auth Error from URL:', error);
             alert(`Erro do Spotify: ${error}`);
             return null;
         }
 
         if (!code) {
+            console.warn('[Spotify] No code in URL.');
             // Check if we have a hash token (legacy/fallback)
             if (window.location.hash.includes('access_token')) {
+                console.log('[Spotify] Found hash token (legacy flow).');
                 return this.getTokenFromHash();
             }
             return null;
@@ -87,12 +90,16 @@ class SpotifyService {
 
         // PKCE: Exchange code for token
         const codeVerifier = localStorage.getItem('spotify_code_verifier');
+        console.log('[Spotify] Code:', code ? 'Present' : 'Missing');
+        console.log('[Spotify] Verifier:', codeVerifier ? 'Present' : 'Missing');
+        
         if (!codeVerifier) {
-            console.error('[Spotify] No code verifier found!');
+            console.error('[Spotify] No code verifier found in localStorage!');
             return null;
         }
 
         try {
+            console.log('[Spotify] Exchanging code for token...');
             const response = await fetch(SPOTIFY_TOKEN_ENDPOINT, {
                 method: 'POST',
                 headers: {
@@ -107,12 +114,16 @@ class SpotifyService {
                 }),
             });
 
+            console.log('[Spotify] Token Response Status:', response.status);
+
             if (!response.ok) {
                 const errorData = await response.json();
+                console.error('[Spotify] Token Exchange Failed. Details:', errorData);
                 throw new Error(errorData.error_description || 'Failed to exchange token');
             }
 
             const data = await response.json();
+            console.log('[Spotify] Token received successfully.');
             this.saveToken(data);
 
             // Clean URL
@@ -120,8 +131,8 @@ class SpotifyService {
             return data.access_token;
 
         } catch (err) {
-            console.error('[Spotify] Token Exchange Error:', err);
-            alert('Falha ao autenticar com Spotify. Tente novamente.');
+            console.error('[Spotify] Token Exchange Exception:', err);
+            alert('Falha ao autenticar com Spotify. Verifique o console para mais detalhes.');
             return null;
         }
     }

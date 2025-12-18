@@ -1,72 +1,37 @@
 import cacheService from './cache';
-import md5 from '../utils/md5';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0/';
+const BACKEND_API_URL = 'http://localhost:3001/api/lastfm';
 
 class LastFMService {
     constructor() {
         this.apiKey = import.meta.env.VITE_LASTFM_API_KEY;
-        this.sharedSecret = (import.meta.env.VITE_LASTFM_SHARED_SECRET || '').trim();
-
-        // Test MD5
-        console.log('[LastFM] MD5 Test "hello":', md5('hello')); // Should be 5d41402abc4b2a76b9719d911017c592
-    }
-
-    // Generate API signature
-    generateSignature(params) {
-        const keys = Object.keys(params).sort();
-        let stringToSign = '';
-
-        keys.forEach(key => {
-            if (key !== 'format' && key !== 'callback') {
-                stringToSign += key + params[key];
-            }
-        });
-
-        console.log('[LastFM] String to sign (without secret):', stringToSign);
-        stringToSign += this.sharedSecret;
-        const signature = md5(stringToSign);
-        console.log('[LastFM] Generated Signature:', signature);
-
-        return signature;
     }
 
     // Make API request to Last.fm with caching
-    async apiRequest(method, params = {}, signed = false) {
+    async apiRequest(method, params = {}) {
         // Generate cache key from method and params
         const cacheKey = cacheService.generateKey('lastfm', method, JSON.stringify(params));
 
-        // Check cache first (only for non-signed/read-only requests)
-        if (!signed) {
-            const cached = cacheService.get(cacheKey);
-            if (cached) {
-                return cached;
-            }
+        // Check cache first
+        const cached = cacheService.get(cacheKey);
+        if (cached) {
+            return cached;
         }
 
         const url = new URL(LASTFM_API_BASE);
         const requestParams = {
             method,
             api_key: this.apiKey,
-            ...params
+            ...params,
+            format: 'json'
         };
-
-        if (signed) {
-            if (!this.sharedSecret) {
-                console.error('Last.fm Shared Secret is missing! Check .env file.');
-                throw new Error('Configuration Error: Shared Secret missing');
-            }
-            requestParams.api_sig = this.generateSignature(requestParams);
-            console.log('[LastFM] Signing params:', requestParams);
-        }
-
-        requestParams.format = 'json';
 
         Object.entries(requestParams).forEach(([key, value]) => {
             url.searchParams.append(key, value);
         });
 
-        console.log(`[LastFM] Requesting: ${method}`, url.toString());
+        console.log(`[LastFM] Requesting: ${method}`);
 
         const response = await fetch(url.toString());
         const data = await response.json();
@@ -81,18 +46,32 @@ class LastFMService {
             throw new Error(data.message);
         }
 
-        // Cache the result (5 minutes TTL) for read-only requests
-        if (!signed) {
-            cacheService.set(cacheKey, data);
-        }
+        // Cache the result (5 minutes TTL)
+        cacheService.set(cacheKey, data);
 
         return data;
     }
 
-    // Get session from token
+    // Get session from token - NOW USES BACKEND
     async getSession(token) {
-        const data = await this.apiRequest('auth.getSession', { token }, true);
-        return data.session;
+        try {
+            const response = await fetch(`${BACKEND_API_URL}/session`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            
+            const data = await response.json();
+            
+            if (data.error || !response.ok) {
+                throw new Error(data.message || 'Failed to authenticate with Last.fm');
+            }
+            
+            return data.session;
+        } catch (error) {
+            console.error('Backend Auth Error:', error);
+            throw error;
+        }
     }
 
     // Get user's recent tracks

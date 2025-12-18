@@ -1,96 +1,63 @@
-/**
- * Mock API Service
- * Simulates backend interactions using localStorage for persistence.
- */
+import axios from 'axios';
 
-const STORAGE_KEYS = {
-    USER: 'music_horizon_user',
-    PLAYLISTS: 'music_horizon_playlists',
-    AUTH_TOKEN: 'auth_token'
+const API_URL = 'http://localhost:3001/api';
+
+// Create axios instance
+const api = axios.create({
+    baseURL: API_URL,
+    headers: {
+        'Content-Type': 'application/json'
+    }
+});
+
+// Add interceptor to include auth token in requests
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+// Helper for standardized responses
+const handleResponse = async (request) => {
+    try {
+        const response = await request;
+        return { success: true, data: response.data };
+    } catch (error) {
+        console.error('API Error:', error.response?.data || error.message);
+        return { 
+            success: false, 
+            message: error.response?.data?.message || 'Ocorreu um erro na comunicação com o servidor.' 
+        };
+    }
 };
-
-// Helper to simulate network delay
-const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms));
 
 // --- USER API ---
 
 export const userAPI = {
-    getCurrentUser: async () => {
-        await delay();
-        const userJson = localStorage.getItem(STORAGE_KEYS.USER);
-        if (!userJson) return { success: false, message: 'Not authenticated' };
-        return { success: true, data: JSON.parse(userJson) };
-    },
+    getCurrentUser: () => handleResponse(api.get('/auth/me')),
 
     signup: async (name, email, password) => {
-        await delay();
-        // Check if user already exists (simplified: only one user supported in local mock)
-        const existing = localStorage.getItem(STORAGE_KEYS.USER);
-        if (existing) {
-             const user = JSON.parse(existing);
-             if (user.email === email) {
-                 return { success: false, message: 'User already exists' };
-             }
+        const res = await handleResponse(api.post('/auth/signup', { name, email, password }));
+        if (res.success && res.data.token) {
+            localStorage.setItem('auth_token', res.data.token);
         }
-
-        const newUser = {
-            id: 'user_' + Date.now(),
-            name,
-            email,
-            avatar: null,
-            createdAt: new Date().toISOString()
-        };
-
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser));
-        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, 'mock_token_' + Date.now());
-        
-        return { 
-            success: true, 
-            data: { user: newUser, token: localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) } 
-        };
+        return res;
     },
 
     login: async (email, password) => {
-        await delay();
-        const userJson = localStorage.getItem(STORAGE_KEYS.USER);
-        
-        if (!userJson) {
-            // Auto-signup for MVP/Demo purposes if user doesn't exist? 
-            // Better to fail to mimic real auth, but authStore logic suggests simpler flow.
-            // Let's stick to: if email matches stored user, login.
-            return { success: false, message: 'User not found' };
+        const res = await handleResponse(api.post('/auth/login', { email, password }));
+        if (res.success && res.data.token) {
+            localStorage.setItem('auth_token', res.data.token);
         }
-
-        const user = JSON.parse(userJson);
-        if (user.email !== email) {
-            return { success: false, message: 'Invalid credentials' };
-        }
-
-        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, 'mock_token_' + Date.now());
-        return { 
-            success: true, 
-            data: { user, token: localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) } 
-        };
+        return res;
     },
 
-    update: async (id, updates) => {
-        await delay();
-        const userJson = localStorage.getItem(STORAGE_KEYS.USER);
-        if (!userJson) return { success: false, message: 'User not found' };
+    update: (id, updates) => handleResponse(api.put(`/users/${id}`, updates)),
 
-        const user = JSON.parse(userJson);
-        if (user.id !== id) return { success: false, message: 'Unauthorized' };
-
-        const updatedUser = { ...user, ...updates };
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
-        
-        return { success: true, data: updatedUser };
-    },
-
-    logout: async () => {
-        await delay(100);
-        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-        // localStorage.removeItem(STORAGE_KEYS.USER); // Optional: keep user data?
+    logout: () => {
+        localStorage.removeItem('auth_token');
         return { success: true };
     }
 };
@@ -98,99 +65,41 @@ export const userAPI = {
 // --- PLAYLIST API ---
 
 export const playlistAPI = {
-    getAll: async () => {
-        await delay();
-        const playlistsJson = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
-        const playlists = playlistsJson ? JSON.parse(playlistsJson) : [];
-        return { success: true, data: playlists };
-    },
+    getAll: () => handleResponse(api.get('/playlists')),
 
-    create: async (name, description, tracks, isPublic) => {
-        await delay();
-        const playlistsJson = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
-        const playlists = playlistsJson ? JSON.parse(playlistsJson) : [];
+    create: (name, description, tracks, isPublic) => 
+        handleResponse(api.post('/playlists', { name, description, tracks, isPublic })),
 
-        const newPlaylist = {
-            id: 'pl_' + Date.now(),
-            name,
-            description,
-            tracks,
-            isPublic,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            exported: false,
-            spotifyId: null
-        };
+    update: (id, updates) => handleResponse(api.put(`/playlists/${id}`, updates)),
 
-        playlists.push(newPlaylist);
-        localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
-
-        return { success: true, data: newPlaylist };
-    },
-
-    update: async (id, updates) => {
-        await delay();
-        const playlistsJson = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
-        if (!playlistsJson) return { success: false, message: 'No playlists found' };
-
-        let playlists = JSON.parse(playlistsJson);
-        const index = playlists.findIndex(p => p.id === id);
-
-        if (index === -1) return { success: false, message: 'Playlist not found' };
-
-        playlists[index] = { 
-            ...playlists[index], 
-            ...updates, 
-            updatedAt: new Date().toISOString() 
-        };
-        
-        localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
-        return { success: true, data: playlists[index] };
-    },
-
-    delete: async (id) => {
-        await delay();
-        const playlistsJson = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
-        if (!playlistsJson) return { success: false, message: 'No playlists found' };
-
-        let playlists = JSON.parse(playlistsJson);
-        const filtered = playlists.filter(p => p.id !== id);
-        
-        localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(filtered));
-        return { success: true };
-    },
+    delete: (id) => handleResponse(api.delete(`/playlists/${id}`)),
 
     addTrack: async (playlistId, track) => {
-        await delay();
-        const playlistsJson = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
-        if (!playlistsJson) return { success: false, message: 'No playlists found' };
-
-        let playlists = JSON.parse(playlistsJson);
-        const index = playlists.findIndex(p => p.id === playlistId);
-
-        if (index === -1) return { success: false, message: 'Playlist not found' };
-
-        playlists[index].tracks.push(track);
-        playlists[index].updatedAt = new Date().toISOString();
-
-        localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
-        return { success: true, data: playlists[index] };
+        // Get current playlist tracks first (simplified)
+        const res = await playlistAPI.getAll();
+        if (!res.success) return res;
+        
+        const playlist = res.data.find(p => p.id === playlistId);
+        if (!playlist) return { success: false, message: 'Playlist not found' };
+        
+        const updatedTracks = [...playlist.tracks, track];
+        return playlistAPI.update(playlistId, { tracks: updatedTracks });
     },
 
     removeTrack: async (playlistId, trackId) => {
-        await delay();
-        const playlistsJson = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
-        if (!playlistsJson) return { success: false, message: 'No playlists found' };
-
-        let playlists = JSON.parse(playlistsJson);
-        const index = playlists.findIndex(p => p.id === playlistId);
-
-        if (index === -1) return { success: false, message: 'Playlist not found' };
-
-        playlists[index].tracks = playlists[index].tracks.filter(t => t.id !== trackId);
-        playlists[index].updatedAt = new Date().toISOString();
-
-        localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
-        return { success: true, data: playlists[index] };
+        const res = await playlistAPI.getAll();
+        if (!res.success) return res;
+        
+        const playlist = res.data.find(p => p.id === playlistId);
+        if (!playlist) return { success: false, message: 'Playlist not found' };
+        
+        const updatedTracks = playlist.tracks.filter(t => t.id !== trackId);
+        return playlistAPI.update(playlistId, { tracks: updatedTracks });
     }
+};
+
+// --- AI API ---
+export const aiAPI = {
+    generateRecommendations: (prompt, limit) => 
+        handleResponse(api.post('/recommendations/generate', { prompt, limit }))
 };

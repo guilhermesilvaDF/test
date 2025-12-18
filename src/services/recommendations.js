@@ -3,10 +3,27 @@ import spotifyService from './spotify';
 import deezerService from './deezer';
 import itunesService from './itunes';
 import usePreviewStore from '../stores/previewStore';
+import { aiAPI } from './api';
 
 class RecommendationService {
     constructor() {
         this.seenTracks = new Set(); // Histórico da sessão para evitar repetições
+    }
+
+    async getAIRecommendations(prompt, limit = 25) {
+        try {
+            const res = await aiAPI.generateRecommendations(prompt, limit);
+            if (res.success && res.data) {
+                // Enrich tracks with images/previews from Spotify/iTunes/Deezer
+                const enriched = await this.enrichWithSpotify(res.data);
+                return enriched;
+            }
+            throw new Error(res.message || 'AI generation failed');
+        } catch (error) {
+            console.error('AI Recommendation Error:', error);
+            // Fallback to traditional method
+            return this.getRecommendations(prompt, limit);
+        }
     }
 
     // Helper para normalizar strings para comparação (remove acentos e caracteres especiais)

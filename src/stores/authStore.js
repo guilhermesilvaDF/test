@@ -47,6 +47,9 @@ const useAuthStore = create((set, get) => ({
                         get().fetchSpotifyUser();
                     }
                     return;
+                } else {
+                    // Token expired or invalid
+                    localStorage.removeItem('auth_token');
                 }
             } catch (error) {
                 console.error('Token inválido ou expirado:', error);

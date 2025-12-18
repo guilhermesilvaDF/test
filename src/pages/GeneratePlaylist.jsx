@@ -25,7 +25,7 @@ function GeneratePlaylist() {
         setGeneratedTracks([]);
         
         try {
-            const tracks = await recommendationService.getRecommendations(prompt);
+            const tracks = await recommendationService.getAIRecommendations(prompt);
             setGeneratedTracks(tracks);
             // Suggest a name based on the prompt
             setPlaylistName(prompt.length > 30 ? prompt.substring(0, 30) + '...' : prompt);

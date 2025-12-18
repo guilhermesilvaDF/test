@@ -11,6 +11,9 @@ export default function Profile() {
     const user = useAuthStore(state => state.user);
     const spotifyConnected = useAuthStore(state => state.spotifyConnected);
     const disconnectSpotify = useAuthStore(state => state.disconnectSpotify);
+    const lastfmUser = useAuthStore(state => state.lastfmUser);
+    const loginLastFM = useAuthStore(state => state.loginLastFM);
+    const disconnectLastFM = useAuthStore(state => state.disconnectLastFM);
     const playlists = usePlaylistStore(state => state.playlists);
 
     const { points, getLevelInfo, getAllBadges } = useGamificationStore();
@@ -88,50 +91,89 @@ export default function Profile() {
                         </div>
                     </section>
 
-                    {/* Badges/Conquistas */}
+                    {/* Connected Accounts */}
                     <section>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-semibold text-white">🏆 Conquistas</h2>
-                            <span className="text-dark-text-muted">
-                                {unlockedCount} / {allBadges.length} desbloqueadas
-                            </span>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                            {allBadges.map(badge => (
-                                <BadgeCard key={badge.id} badge={badge} unlocked={badge.unlocked} />
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* Spotify Connection */}
-                    <section>
-                        <h2 className="text-2xl font-semibold text-white mb-4">Integração Spotify</h2>
-                        {spotifyConnected ? (
-                            <div className="bg-green-500/10 border border-green-500/50 rounded-lg p-6">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                        <i className="ph-fill ph-check-circle text-3xl text-green-400"></i>
+                        <h2 className="text-2xl font-semibold text-white mb-4">Contas Conectadas</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            
+                            {/* Spotify Card */}
+                            {spotifyConnected ? (
+                                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-6 flex flex-col justify-between">
+                                    <div className="flex items-center space-x-4 mb-4">
+                                        <i className="ph-fill ph-spotify-logo text-4xl text-green-400"></i>
                                         <div>
-                                            <h3 className="text-green-400 font-semibold text-lg">Spotify Conectado</h3>
-                                            <p className="text-sm text-dark-text-muted">
-                                                Você pode reproduzir músicas e exportar playlists
-                                            </p>
+                                            <h3 className="text-white font-bold text-lg">Spotify</h3>
+                                            <p className="text-green-400 text-sm">Conectado</p>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={disconnectSpotify}
-                                        className="btn-secondary text-sm"
-                                    >
-                                        Desconectar
-                                    </button>
+                                    <div className="flex justify-between items-center mt-2">
+                                        <p className="text-xs text-gray-400">Permite reprodução e exportação</p>
+                                        <button
+                                            onClick={disconnectSpotify}
+                                            className="text-sm text-red-400 hover:text-red-300 transition-colors"
+                                        >
+                                            Desconectar
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <SpotifyConnect />
-                        )}
+                            ) : (
+                                <div className="bg-dark-card border border-dark-border rounded-lg p-6 flex flex-col justify-between opacity-80 hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center space-x-4 mb-4">
+                                        <i className="ph-fill ph-spotify-logo text-4xl text-gray-500"></i>
+                                        <div>
+                                            <h3 className="text-white font-bold text-lg">Spotify</h3>
+                                            <p className="text-gray-500 text-sm">Não conectado</p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2">
+                                        <SpotifyConnect />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Last.fm Card */}
+                            {lastfmUser ? (
+                                <div className="bg-[#ba0000]/10 border border-[#ba0000]/30 rounded-lg p-6 flex flex-col justify-between">
+                                    <div className="flex items-center space-x-4 mb-4">
+                                        <i className="ph-fill ph-lastfm-logo text-4xl text-[#ba0000]"></i>
+                                        <div>
+                                            <h3 className="text-white font-bold text-lg">Last.fm</h3>
+                                            <p className="text-[#ba0000] text-sm">Conectado como {lastfmUser}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center mt-2">
+                                        <p className="text-xs text-gray-400">Sincroniza histórico e recomendações</p>
+                                        <button
+                                            onClick={disconnectLastFM}
+                                            className="text-sm text-red-400 hover:text-red-300 transition-colors"
+                                        >
+                                            Desconectar
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-dark-card border border-dark-border rounded-lg p-6 flex flex-col justify-between opacity-80 hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center space-x-4 mb-4">
+                                        <i className="ph-fill ph-lastfm-logo text-4xl text-gray-500"></i>
+                                        <div>
+                                            <h3 className="text-white font-bold text-lg">Last.fm</h3>
+                                            <p className="text-gray-500 text-sm">Não conectado</p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2">
+                                        <button 
+                                            onClick={loginLastFM}
+                                            className="w-full btn-primary bg-[#d51007] hover:bg-[#ba0000] border-none text-white text-sm py-2"
+                                        >
+                                            Conectar Last.fm
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </section>
 
-                    {/* Statistics */}
+                    {/* Badges/Conquistas */}
                     <section>
                         <h2 className="text-2xl font-semibold text-white mb-6">📊 Estatísticas</h2>
                         <div className="grid grid-cols-3 gap-6">
