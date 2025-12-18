@@ -3,6 +3,8 @@ import spotifyService from './spotify';
 import deezerService from './deezer';
 import itunesService from './itunes';
 import usePreviewStore from '../stores/previewStore';
+import useListeningHistoryStore from '../stores/listeningHistoryStore';
+import useAuthStore from '../stores/authStore';
 import { aiAPI } from './api';
 
 class RecommendationService {
@@ -12,7 +14,43 @@ class RecommendationService {
 
     async getAIRecommendations(prompt, limit = 25) {
         try {
-            const res = await aiAPI.generateRecommendations(prompt, limit);
+            // --- Rule of Threes Context Gathering ---
+            const context = {
+                genres: [],
+                albums: [],
+                recentSongs: []
+            };
+
+            const historyStore = useListeningHistoryStore.getState();
+            const authStore = useAuthStore.getState();
+            const lastfmUser = authStore.lastfmUser;
+
+            // 1. Three Recent Songs (from local history store)
+            const recent = historyStore.getRecentTracks(3);
+            context.recentSongs = recent.map(t => `${t.name} by ${t.artist}`);
+
+            // 2. Three Top Albums & Genres (from Last.fm if connected)
+            if (lastfmUser) {
+                try {
+                    const [albums, artists] = await Promise.all([
+                        lastfmService.getTopAlbums(lastfmUser, 3, '7day'),
+                        lastfmService.getTopArtists(lastfmUser, 5, '7day')
+                    ]);
+
+                    context.albums = albums.map(a => `${a.name} by ${a.artist?.name || a.artist}`);
+
+                    // Extract genres from top artists (takes first tag of top 3 artists)
+                    const genrePromises = artists.slice(0, 3).map(artist => 
+                        lastfmService.getArtistTags(artist.name).then(tags => tags[0]?.name).catch(() => null)
+                    );
+                    const genres = await Promise.all(genrePromises);
+                    context.genres = [...new Set(genres.filter(g => g))].slice(0, 3);
+                } catch (e) {
+                    console.warn('Could not fetch Last.fm context for AI:', e);
+                }
+            }
+
+            const res = await aiAPI.generateRecommendations(prompt, limit, context);
             if (res.success && res.data) {
                 // Enrich tracks with images/previews from Spotify/iTunes/Deezer
                 const enriched = await this.enrichWithSpotify(res.data);

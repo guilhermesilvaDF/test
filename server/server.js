@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import lastfmRoutes from './routes/lastfm.js';
 
 dotenv.config();
@@ -15,13 +15,13 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key-123';
 
 // AI Setup
-const genAI = process.env.VITE_GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.VITE_GEMINI_API_KEY) : null;
-const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-pro" }) : null;
+const genAI = process.env.VITE_GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY }) : null;
 
 app.use(cors());
 app.use(express.json());
 
 // --- Middleware ---
+// ... (rest of middleware)
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -40,6 +40,7 @@ const authenticateToken = (req, res, next) => {
 
 app.use('/api/lastfm', lastfmRoutes);
 
+// ... (keep all other routes: health, auth, playlists...)
 // Health Check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });
@@ -188,27 +189,73 @@ app.delete('/api/playlists/:id', authenticateToken, async (req, res) => {
 // --- AI Routes ---
 
 app.post('/api/recommendations/generate', authenticateToken, async (req, res) => {
-    if (!aiModel) {
+    if (!genAI) {
         return res.status(503).json({ message: 'AI Service not configured' });
     }
 
     try {
-        const { prompt, limit = 20 } = req.body;
+        let { prompt, limit = 20, context = {} } = req.body;
 
-        const aiPrompt = `
-            Act as a music expert DJ. Based on the following prompt, suggest ${limit} song recommendations: "${prompt}"
+        // --- Input Sanitization & Validation ---
+        if (!prompt || typeof prompt !== 'string') {
+            return res.status(400).json({ message: 'Valid prompt is required' });
+        }
+
+        // 1. Trim and limit length (max 500 chars for prompt to prevent abuse)
+        prompt = prompt.trim().substring(0, 500);
+
+        // 2. Limit the number of songs (max 50)
+        limit = Math.min(Math.max(parseInt(limit) || 20, 5), 50);
+
+        // 3. Sanitize Context (Limit array sizes to 5 items each to control token usage)
+        const { genres = [], albums = [], recentSongs = [] } = context;
+        const safeGenres = Array.isArray(genres) ? genres.slice(0, 5).map(s => String(s).substring(0, 50)) : [];
+        const safeAlbums = Array.isArray(albums) ? albums.slice(0, 5).map(s => String(s).substring(0, 100)) : [];
+        const safeRecent = Array.isArray(recentSongs) ? recentSongs.slice(0, 5).map(s => String(s).substring(0, 100)) : [];
+
+        let contextPrompt = '';
+        if (safeGenres.length > 0 || safeAlbums.length > 0 || safeRecent.length > 0) {
+            contextPrompt = `\n\nUser Context (Musical History):
+            ${safeGenres.length > 0 ? `- Top Genres: ${safeGenres.join(', ')}` : ''}
+            ${safeAlbums.length > 0 ? `- Recent/Top Albums: ${safeAlbums.join(', ')}` : ''}
+            ${safeRecent.length > 0 ? `- Recently Played: ${safeRecent.join(', ')}` : ''}
             
-            Rules:
-            1. Provide a brief 3-5 word reason for each recommendation.
-            2. Output strictly in JSON format as an array of objects: [{ "name": "Song Name", "artist": "Artist Name", "reason": "Reason" }]
-            3. Do not include markdown formatting. Just the raw JSON array.
-        `;
+            Use this context to influence the vibe of the recommendations while strictly following the user's prompt.`;
+        }
 
-        const result = await aiModel.generateContent(aiPrompt);
-        const response = await result.response;
-        const text = response.text().replace(/```json|```/g, '').trim();
+        const response = await genAI.models.generateContent({
+            model: 'gemini-2.0-flash',
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: 'ARRAY',
+                    items: {
+                        type: 'OBJECT',
+                        properties: {
+                            name: { type: 'STRING' },
+                            artist: { type: 'STRING' },
+                            reason: { type: 'STRING' }
+                        }
+                    }
+                }
+            },
+            contents: [
+                {
+                    role: 'user',
+                    parts: [
+                        {
+                            text: `Act as a music expert DJ. Based on the following prompt, suggest ${limit} song recommendations: "${prompt}".${contextPrompt}
+                            
+                            Provide a brief 3-5 word reason for each recommendation.`
+                        }
+                    ]
+                }
+            ]
+        });
+
+        const recommendations = JSON.parse(response.data.candidates[0].content.parts[0].text);
         
-        res.json(JSON.parse(text));
+        res.json(recommendations);
     } catch (error) {
         console.error('Gemini AI Error:', error);
         res.status(500).json({ message: 'Error generating recommendations' });

@@ -114,7 +114,3 @@ A aplicação estará disponível em: `http://localhost:5173`
 - **Google Gemini API** - Inteligência Artificial
 - **Spotify Web API** - Playback e Playlists
 - **Last.fm API** - Metadados e Recomendações
-
-## 📝 Licença
-
-MIT

@@ -100,6 +100,6 @@ export const playlistAPI = {
 
 // --- AI API ---
 export const aiAPI = {
-    generateRecommendations: (prompt, limit) => 
-        handleResponse(api.post('/recommendations/generate', { prompt, limit }))
+    generateRecommendations: (prompt, limit, context) => 
+        handleResponse(api.post('/recommendations/generate', { prompt, limit, context }))
 };
