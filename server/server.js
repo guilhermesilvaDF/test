@@ -225,7 +225,7 @@ app.post('/api/recommendations/generate', authenticateToken, async (req, res) =>
 
                 const response = await genAI.models.generateContent({
 
-                    model: 'gemini-2.0-flash',
+                    model: 'gemini-flash-lite-latest',
 
                     config: {
 
@@ -339,7 +339,7 @@ app.post('/api/ai/analyze', authenticateToken, async (req, res) => {
         const artistsStr = topArtists.slice(0, 15).map(a => a.name).join(", ");
 
         const response = await genAI.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-flash-lite-latest',
             config: {
                 responseMimeType: 'application/json',
                 responseSchema: {
@@ -389,7 +389,7 @@ app.post('/api/ai/describe-playlist', authenticateToken, async (req, res) => {
         const trackList = tracks.slice(0, 5).map(t => `${t.name} - ${t.artist}`).join(", ");
 
         const response = await genAI.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-flash-lite-latest',
             contents: [{
                 role: 'user',
                 parts: [{ text: `Write a short, catchy, 1-sentence description for a playlist named "${name}" containing songs like: ${trackList}. Language: Portuguese.` }]
