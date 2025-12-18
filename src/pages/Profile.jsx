@@ -52,7 +52,7 @@ export default function Profile() {
                     {/* Gamification Dashboard */}
                     <section>
                         <h2 className="text-2xl font-semibold text-white mb-6">🎮 Progresso</h2>
-                        <div className="bg-dark-card border border-dark-border p-8 rounded-lg">
+                        <div className="bg-dark-card border border-dark-border p-8 rounded-lg mb-8">
                             <div className="flex items-center space-x-8">
                                 {/* Level Badge */}
                                 <LevelBadge
@@ -88,6 +88,14 @@ export default function Profile() {
                                     )}
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Badges Grid */}
+                        <h3 className="text-xl font-semibold text-white mb-4">Conquistas ({unlockedCount}/{allBadges.length})</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            {allBadges.map(badge => (
+                                <BadgeCard key={badge.id} badge={badge} />
+                            ))}
                         </div>
                     </section>
 

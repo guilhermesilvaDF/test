@@ -3,6 +3,7 @@ import spotifyService from '../services/spotify';
 import lastfmService from '../services/lastfm';
 import { userAPI } from '../services/api';
 import useListeningHistoryStore from './listeningHistoryStore';
+import useGamificationStore from './gamificationStore';
 
 const useAuthStore = create((set, get) => ({
     // ... (rest of store)
@@ -192,6 +193,7 @@ const useAuthStore = create((set, get) => ({
                 
                 localStorage.setItem('spotify_user_id', updatedUser.spotifyId);
                 useListeningHistoryStore.getState().syncHistory();
+                useGamificationStore.getState().trackSpotifyConnected();
                 
                 return { success: true, message: 'Spotify vinculado com sucesso!' };
             } else {

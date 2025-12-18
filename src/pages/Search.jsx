@@ -194,7 +194,12 @@ function Search() {
     const [newBadges, setNewBadges] = useState([]);
     
     const addPlaylist = usePlaylistStore(state => state.addPlaylist);
-    const { trackSearch, trackTracksDiscovered, trackPlaylistCreated } = useGamificationStore();
+    const { 
+        trackSearch, 
+        trackPlaylistCreated, 
+        trackArtistSearched, 
+        trackGenreSearched 
+    } = useGamificationStore();
 
     // Main search function
     const handleSearch = async (e) => {
@@ -233,10 +238,7 @@ function Search() {
 
             // Track gamification
             trackSearch(searchQuery);
-            if (result.tracks.items.length > 0) {
-                trackTracksDiscovered(result.tracks.items.length);
-            }
-
+            
             // Check for badges
             const badges = useGamificationStore.getState().checkAndUnlockBadges();
             if (badges.length > 0) {
@@ -331,6 +333,18 @@ function Search() {
         setError(null);
         
         try {
+            // Track gamification
+            trackArtistSearched(artist.name);
+            if (artist.genres && artist.genres.length > 0) {
+                artist.genres.forEach(genre => trackGenreSearched(genre));
+            }
+
+            // Check for badges
+            const badges = useGamificationStore.getState().checkAndUnlockBadges();
+            if (badges.length > 0) {
+                setNewBadges(badges);
+            }
+
             // Get top tracks by this artist
             const topTracks = await spotifyService.getArtistTopTracks(artist.id);
             

@@ -157,7 +157,15 @@ const useGamificationStore = create(
                         tracksDiscovered: stats.tracksDiscovered + count
                     }
                 });
-                get().addPoints(count * 5, `${count} músicas descobertas`);
+                get().addPoints(count * 5, count === 1 ? 'Nova música descoberta' : `${count} músicas descobertas`);
+            },
+
+            trackListeningTime: (durationSeconds) => {
+                // Reward 1 point for every 30 seconds of music
+                const points = Math.floor(durationSeconds / 30);
+                if (points > 0) {
+                    get().addPoints(points, 'Tempo de audição');
+                }
             },
 
             trackArtistSearched: (artistName) => {

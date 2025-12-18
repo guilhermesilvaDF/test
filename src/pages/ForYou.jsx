@@ -4,6 +4,7 @@ import TrackListItem from '../components/Player/TrackListItem';
 import useAuthStore from '../stores/authStore';
 import useListeningHistoryStore from '../stores/listeningHistoryStore';
 import usePlaylistStore from '../stores/playlistStore';
+import useGamificationStore from '../stores/gamificationStore';
 import lastfmService from '../services/lastfm';
 import itunesService from '../services/itunes';
 import cacheService from '../services/cache';
@@ -738,6 +739,8 @@ export default function ForYou() {
                 tracks: recommendations.tracks,
                 isPublic: false
             });
+
+            useGamificationStore.getState().trackPlaylistCreated();
 
             setShowCreatePlaylist(false);
             setPlaylistName('');

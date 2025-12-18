@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 import spotifyService from '../services/spotify';
 import lastfmService from '../services/lastfm';
 import useAuthStore from './authStore';
+import useGamificationStore from './gamificationStore';
 
 const useListeningHistoryStore = create(
     persist(
@@ -130,6 +131,13 @@ const useListeningHistoryStore = create(
                     totalTime += (play.duration || 0);
                 });
 
+                // Gamification: Check for new discoveries
+                const previousUniqueCount = get().stats.uniqueTracks.size;
+                const newUniqueCount = uniqueTracks.size;
+                if (newUniqueCount > previousUniqueCount) {
+                    useGamificationStore.getState().trackTracksDiscovered(newUniqueCount - previousUniqueCount);
+                }
+
                 set({
                     plays: merged,
                     stats: {
@@ -166,9 +174,20 @@ const useListeningHistoryStore = create(
                 const artistCount = topArtists.get(track.artist) || 0;
                 topArtists.set(track.artist, artistCount + 1);
 
-                // Update unique tracks
+                // Update unique tracks & Gamification
                 const uniqueTracks = new Set(stats.uniqueTracks);
-                uniqueTracks.add(track.id);
+                if (!uniqueTracks.has(track.id)) {
+                    uniqueTracks.add(track.id);
+                    useGamificationStore.getState().trackTracksDiscovered(1);
+                }
+                
+                // Track listening time gamification
+                if (duration > 0) {
+                    useGamificationStore.getState().trackListeningTime(duration);
+                } else {
+                    // Fallback for tracks without duration
+                    useGamificationStore.getState().addPoints(2, 'Música ouvida');
+                }
 
                 // Update total listening time
                 const totalListeningTime = stats.totalListeningTime + duration;

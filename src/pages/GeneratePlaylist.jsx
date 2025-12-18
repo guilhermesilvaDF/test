@@ -5,6 +5,7 @@ import TrackCard from '../components/Player/TrackCard';
 import recommendationService from '../services/recommendations';
 import usePlaylistStore from '../stores/playlistStore';
 import usePlayerStore from '../stores/playerStore';
+import useGamificationStore from '../stores/gamificationStore';
 import cacheService from '../services/cache';
 
 function GeneratePlaylist() {
@@ -67,6 +68,7 @@ function GeneratePlaylist() {
                 tracks: generatedTracks,
                 isPublic: false
             });
+            useGamificationStore.getState().trackPlaylistCreated();
             navigate('/playlists');
         } catch (error) {
             console.error('Error saving playlist:', error);
