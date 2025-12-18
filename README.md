@@ -69,10 +69,14 @@ VITE_GEMINI_API_KEY=sua_gemini_key
 
 ### 4. Inicializar o Banco de Dados
 
+O arquivo de banco de dados (`dev.db`) não é rastreado pelo Git. Em uma nova instalação, você deve criá-lo a partir do schema do Prisma:
+
 ```bash
 cd server
 npx prisma db push
 ```
+
+Isso criará o arquivo SQLite e aplicará as tabelas necessárias.
 
 ### 5. Executar o Projeto
 
