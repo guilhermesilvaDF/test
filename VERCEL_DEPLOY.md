@@ -1,109 +1,68 @@
-# 🚀 Vercel Deployment - Quick Reference
+# 🚀 Guia de Deploy no Vercel
 
-## Status: ✅ Vercel-Ready
+Este projeto usa **React (Vite)** no frontend e **Express (Node.js)** no backend. Para rodar no Vercel, precisamos de algumas configurações especiais, principalmente no Banco de Dados.
 
-O código está preparado para deploy no Vercel. Quando estiver pronto para fazer deploy, siga os passos abaixo.
+## 1. Banco de Dados (PostgreSQL)
 
----
+O Vercel não suporta arquivos locais (SQLite). Você PRECISA migrar para um banco PostgreSQL.
 
-## 📝 Checklist Rápido
+### Passo a Passo:
+1.  Crie uma conta gratuita no [Neon.tech](https://neon.tech) ou [Supabase](https://supabase.com).
+2.  Crie um novo projeto "MusicHorizon".
+3.  Copie a **Connection String** (ex: `postgres://user:pass@host/db...`).
 
-### Antes do Deploy (5 minutos)
+### No Projeto:
+1.  Edite `server/prisma/schema.prisma`:
+    ```prisma
+    datasource db {
+      provider = "postgresql" // Mude de "sqlite" para "postgresql"
+      url      = env("DATABASE_URL")
+    }
+    ```
+2.  Edite `server/.env` (local) para testar:
+    ```env
+    DATABASE_URL="sua_string_postgres_aqui"
+    ```
+3.  Rode a migração (atenção: `tracks` deve ser `Json` no Postgres, mas nosso código usa string. Para manter compatibilidade rápida, mantenha `String` no schema ou ajuste para `Json` e remova o `JSON.stringify` manual).
+    *   *Dica Vercel*: Mantenha `String` por enquanto para evitar refatorar tudo.
 
-1. **Editar `server/prisma/schema.prisma`**:
-   - Descomentar o bloco PostgreSQL
-   - Comentar o bloco SQLite
-   - Mudar `tracks: String` → `tracks: Json`
+## 2. Configuração Vercel
 
-2. **Commit e Push**:
-   ```bash
-   git add .
-   git commit -m "chore: switch to PostgreSQL for Vercel"
-   git push
-   ```
+Já criei os arquivos necessários:
+- `vercel.json`: Redireciona `/api` para o backend.
+- `api/index.js`: Ponto de entrada do Serverless.
+- `package.json`: Dependências consolidadas.
 
-### No Vercel Dashboard
+### Environment Variables (no Vercel):
+No painel do Vercel (Settings > Environment Variables), adicione:
 
-3. **Criar Vercel Postgres** (Storage → Create Database → Postgres)
-4. **Configurar Variáveis de Ambiente** (Settings → Environment Variables)
-5. **Deploy!**
+| Variável | Descrição |
+|----------|-----------|
+| `DATABASE_URL` | A string do seu banco PostgreSQL (Neon/Supabase) |
+| `JWT_SECRET` | Uma senha secreta longa |
+| `LASTFM_API_KEY` | Sua chave Last.fm |
+| `LASTFM_SHARED_SECRET` | Seu segredo Last.fm |
+| `GEMINI_API_KEY` | Sua chave Google Gemini |
+| `VITE_API_URL` | Deixe vazio ou use `/api` (padrão relativo) |
 
----
+## 3. Comandos de Build
 
-## 🔧 Mudanças Necessárias
+No Vercel, configure:
+- **Build Command**: `npm run vercel-build`
+- **Output Directory**: `dist`
+- **Install Command**: `npm install`
 
-### 1. Schema Prisma
+## 4. Deploy
 
-**Arquivo**: `server/prisma/schema.prisma`
-
-Já está documentado no arquivo! Apenas:
-- ✅ Descomentar bloco PostgreSQL
-- ✅ Comentar bloco SQLite  
-- ✅ Mudar `tracks: String` → `tracks: Json`
-
-### 2. Variáveis de Ambiente
-
-Adicionar no Vercel:
-- `DATABASE_URL` (auto-gerado pelo Vercel Postgres)
-- `DATABASE_URL_UNPOOLED` (auto-gerado pelo Vercel Postgres)
-- `PORT=3001`
-- `JWT_SECRET=seu_secret_aqui`
-- `VITE_LASTFM_API_KEY=sua_key`
-- `VITE_LASTFM_SHARED_SECRET=seu_secret`
-- `VITE_GEMINI_API_KEY=sua_key`
-- `VITE_SPOTIFY_CLIENT_ID=c9201b4af26542f0a120022ce5572550`
-- `VITE_SPOTIFY_REDIRECT_URI=https://seu-projeto.vercel.app/callback`
-
-### 3. Spotify Dashboard
-
-Adicionar redirect URI:
-```
-https://seu-projeto.vercel.app/callback
-```
+1.  Envie as alterações para o GitHub.
+2.  Importe o projeto no Vercel.
+3.  Preencha as variáveis de ambiente.
+4.  Deploy! 🚀
 
 ---
 
-## ✅ O que já está pronto
+## ⚠️ Atenção: Migração SQLite -> Postgres
 
-- ✅ `vercel.json` configurado
-- ✅ **Código compatível com ambos os bancos** (SQLite e PostgreSQL)
-- ✅ `playlistUtils.js` normaliza tracks automaticamente
-- ✅ Backend exporta `app` corretamente
-- ✅ Build scripts configurados
-
----
-
-## 🔄 Como funciona a compatibilidade
-
-O código agora usa **utilitários** que funcionam com ambos os tipos:
-
-```javascript
-// playlistUtils.js detecta automaticamente:
-// - SQLite: tracks vem como String → faz JSON.parse()
-// - PostgreSQL: tracks vem como Json → retorna direto
-```
-
-Isso significa:
-- 🟢 **Desenvolvimento local**: funciona com SQLite
-- 🟢 **Produção Vercel**: funciona com PostgreSQL
-- 🟢 **Zero mudanças de código** na hora do deploy!
-
----
-
-## 📚 Documentação Completa
-
-Para guia detalhado, veja:
-- [`implementation_plan.md`](file:///C:/Users/Guilherme/.gemini/antigravity/brain/860e8cdf-d89c-4b4c-ab70-5ef7db86333e/implementation_plan.md) - Passo-a-passo simplificado
-- [`vercel_deployment.md`](file:///C:/Users/Guilherme/.gemini/antigravity/brain/860e8cdf-d89c-4b4c-ab70-5ef7db86333e/vercel_deployment.md) - Guia completo com troubleshooting
-
----
-
-## 💡 Voltar para SQLite
-
-Se quiser voltar ao SQLite depois de testar PostgreSQL:
-
-1. Editar `schema.prisma` (inverter os comentários)
-2. Mudar `tracks: Json` → `tracks: String`
-3. Executar `npx prisma db push`
-
-O código continua funcionando! 🎉
+Seu código atual salva `tracks` como string JSON no SQLite.
+Se mudar para Postgres, o Prisma pode reclamar se você tentar usar o tipo `Json` nativo sem ajustar o código.
+**Recomendação**: Mantenha `tracks String` no `schema.prisma` mesmo usando Postgres para garantir que o deploy funcione sem reescrever o backend agora.
