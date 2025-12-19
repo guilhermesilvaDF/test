@@ -724,8 +724,6 @@ class RecommendationService {
             const allTracks = [];
             const seenArtists = new Set(topArtists.map(a => a.name.toLowerCase()));
             
-            // ... (keep existing Last.fm logic)
-
             // 2. For each top artist, get similar artists
             const promises = topArtists.map(async (artist) => {
                 try {
@@ -764,6 +762,16 @@ class RecommendationService {
 
         } catch (error) {
             console.error('Error getting recent recommendations:', error);
+            return [];
+        }
+    }
+
+    async searchAndEnrich(query, limit = 25) {
+        try {
+            const results = await lastfmService.searchTrack(query, limit);
+            return await this.enrichWithSpotify(results.tracks || []);
+        } catch (error) {
+            console.error('Error in searchAndEnrich:', error);
             return [];
         }
     }

@@ -1,24 +1,62 @@
-// Free cover art service using iTunes Search API
+import deezerService from './deezer';
+
+// Free cover art service using Deezer (primary) and iTunes (fallback)
 class CoverArtService {
     constructor() {
-        this.lastCallTime = 0;
-        this.minDelay = 100; // 100ms entre chamadas
+        this.queue = [];
+        this.processing = false;
+        this.minDelay = 300; // 300ms delay between requests
     }
 
     async getCoverArt(trackName, artistName) {
-        try {
-            // Rate limiting: aguardar mínimo entre chamadas
-            const now = Date.now();
-            const timeSinceLastCall = now - this.lastCallTime;
-            if (timeSinceLastCall < this.minDelay) {
-                await new Promise(resolve => setTimeout(resolve, this.minDelay - timeSinceLastCall));
-            }
-            this.lastCallTime = Date.now();
+        return new Promise((resolve) => {
+            this.queue.push({ trackName, artistName, resolve });
+            this.processQueue();
+        });
+    }
 
+    clearQueue() {
+        this.queue = [];
+    }
+
+    async processQueue() {
+        if (this.processing || this.queue.length === 0) return;
+        this.processing = true;
+
+        while (this.queue.length > 0) {
+            const { trackName, artistName, resolve } = this.queue.shift();
+            
+            try {
+                const result = await this._fetchCoverArt(trackName, artistName);
+                resolve(result);
+            } catch (error) {
+                console.error('Error in cover art queue:', error);
+                resolve(null);
+            }
+
+            // Wait before next request
+            await new Promise(r => setTimeout(r, this.minDelay));
+        }
+
+        this.processing = false;
+    }
+
+    async _fetchCoverArt(trackName, artistName) {
+        try {
+            // 1. Try Deezer first (Better rate limits)
+            const deezerTrack = await deezerService.searchTrack(trackName, artistName);
+            if (deezerTrack && deezerTrack.album) {
+                const art = deezerTrack.album.cover_xl || deezerTrack.album.cover_big || deezerTrack.album.cover_medium;
+                if (art) return art;
+            }
+
+            // 2. Fallback to iTunes
             const query = `${trackName} ${artistName}`;
             const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=1`;
 
             const response = await fetch(url);
+            if (!response.ok) return null;
+            
             const data = await response.json();
 
             if (data.results && data.results.length > 0) {

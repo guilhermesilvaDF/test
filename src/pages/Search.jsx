@@ -1,29 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Header from '../components/Layout/Header';
 import TrackListItem from '../components/Player/TrackListItem';
 import Toast from '../components/Toast';
 import AchievementToast from '../components/Gamification/AchievementToast';
-import lastfmService from '../services/lastfm';
+import recommendationService from '../services/recommendations';
 import usePlaylistStore from '../stores/playlistStore';
 import useGamificationStore from '../stores/gamificationStore';
-
-// Convert Last.fm track to app format
-function normalizeLastFmTrack(track) {
-    const image = track.image?.find(img => img.size === 'large')?.['#text'] || 
-                  track.image?.find(img => img.size === 'medium')?.['#text'];
-    
-    return {
-        id: track.mbid || `${track.artist}-${track.name}`.replace(/\s/g, '-'),
-        name: track.name,
-        artist: track.artist || '',
-        album: '',
-        imageUrl: image || null,
-        spotifyUri: null,
-        previewUrl: track.url,
-        duration: null,
-        popularity: track.listeners ? parseInt(track.listeners) : 0
-    };
-}
 
 function Search() {
     const [searchQuery, setSearchQuery] = useState('');
@@ -35,6 +17,8 @@ function Search() {
     const [showToast, setShowToast] = useState(false);
     const [newBadges, setNewBadges] = useState([]);
     
+    const searchIdRef = useRef(0);
+    
     const addPlaylist = usePlaylistStore(state => state.addPlaylist);
     const { trackSearch, trackTracksDiscovered, trackPlaylistCreated } = useGamificationStore();
 
@@ -44,28 +28,35 @@ function Search() {
 
         setIsLoading(true);
         setError(null);
-
+        setRecommendations([]);
+        
+        // Increment search ID to invalidate previous enrichment
+        const currentSearchId = ++searchIdRef.current;
+        
         try {
-            // Search for tracks using Last.fm
-            const result = await lastfmService.searchTrack(searchQuery, 25, 1);
-            const tracks = Array.isArray(result.tracks) ? result.tracks.map(normalizeLastFmTrack) : [];
+            // Search and enrich using the robust recommendation service
+            const tracks = await recommendationService.searchAndEnrich(searchQuery, 25);
             
-            setRecommendations(tracks);
+            if (searchIdRef.current === currentSearchId) {
+                setRecommendations(tracks);
 
-            // Track gamification
-            trackSearch(searchQuery);
-            trackTracksDiscovered(tracks.length);
+                // Track gamification
+                trackSearch(searchQuery);
+                trackTracksDiscovered(tracks.length);
 
-            // Check for new badges
-            const badges = useGamificationStore.getState().checkAndUnlockBadges();
-            if (badges.length > 0) {
-                setNewBadges(badges);
+                // Check for new badges
+                const badges = useGamificationStore.getState().checkAndUnlockBadges();
+                if (badges.length > 0) {
+                    setNewBadges(badges);
+                }
             }
         } catch (err) {
             setError('Erro ao buscar recomendações. Tente novamente.');
             console.error(err);
         } finally {
-            setIsLoading(false);
+            if (searchIdRef.current === currentSearchId) {
+                setIsLoading(false);
+            }
         }
     };
 
