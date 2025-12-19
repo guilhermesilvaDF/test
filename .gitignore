@@ -125,3 +125,5 @@ dist
 
 # Kiro
 .kiro
+.vercel
+.env*.local

@@ -8,7 +8,7 @@ const buildError = (message, status = 400) => {
 
 export const getUserPlaylists = async (userId) => {
     const playlists = await prisma.playlist.findMany({ where: { userId } });
-    return playlists.map((p) => ({ ...p, tracks: JSON.parse(p.tracks || '[]') }));
+    return playlists;
 };
 
 export const createPlaylist = async (userId, payload) => {
@@ -18,25 +18,22 @@ export const createPlaylist = async (userId, payload) => {
         data: {
             name,
             description,
-            tracks: JSON.stringify(tracks || []),
+            tracks: tracks || [],
             isPublic: !!isPublic,
             userId,
         },
     });
 
-    return { ...playlist, tracks: tracks || [] };
+    return playlist;
 };
 
 export const updatePlaylist = async (userId, id, updates) => {
-    const data = { ...updates };
-    if (data.tracks) data.tracks = JSON.stringify(data.tracks);
-
     const playlist = await prisma.playlist.update({
         where: { id: parseInt(id, 10), userId },
-        data,
+        data: updates,
     });
 
-    return { ...playlist, tracks: JSON.parse(playlist.tracks) };
+    return playlist;
 };
 
 export const deletePlaylist = async (userId, id) => {

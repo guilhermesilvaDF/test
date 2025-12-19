@@ -1,7 +1,7 @@
 import cacheService from './cache';
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0/';
-const BACKEND_API_URL = 'http://localhost:3001/api/lastfm';
+const BACKEND_API_URL = (import.meta.env.VITE_API_URL || '/api') + '/lastfm';
 
 class LastFMService {
     constructor() {

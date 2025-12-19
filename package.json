@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "cd server && npm run dev",
-    "start": "node scripts/check-env.cjs && concurrently \"npm run server\" \"npm run dev\" --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\""
+    "start": "node scripts/check-env.cjs && concurrently \"npm run server\" \"npm run dev\" --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\"",
+    "vercel-build": "npm run build && cd server && npx prisma generate",
+    "postinstall": "cd server && npm install"
   },
   "dependencies": {
     "axios": "^1.13.2",

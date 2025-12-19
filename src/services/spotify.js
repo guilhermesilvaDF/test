@@ -5,6 +5,8 @@ const SCOPES = [
     'user-read-playback-state',
     'user-modify-playback-state',
     'user-read-currently-playing',
+    'user-read-recently-played',
+    'user-top-read',
     'streaming',
     'user-read-email',
     'user-read-private',
