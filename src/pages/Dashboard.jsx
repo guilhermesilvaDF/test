@@ -5,7 +5,7 @@ function Dashboard() {
     const navigate = useNavigate();
 
     const handleStartSearch = () => {
-        navigate('/search');
+        navigate('/generate');
     };
 
     return (
@@ -26,7 +26,7 @@ function Dashboard() {
                             className="btn-primary text-lg py-4 px-8"
                         >
                             <i className="ph ph-magnifying-glass mr-2"></i>
-                            Começar a Buscar
+                            Descobrir Recomendações
                         </button>
                     </section>
 

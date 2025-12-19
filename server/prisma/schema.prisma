@@ -6,11 +6,20 @@ generator client {
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
+// DEVELOPMENT: SQLite (local)
+// PRODUCTION: PostgreSQL (Vercel)
+// To switch: uncomment the PostgreSQL block and comment the SQLite block
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
+
+// For Vercel deployment, replace the above with:
+// datasource db {
+//   provider  = "postgresql"
+//   url       = env("DATABASE_URL")
+//   directUrl = env("DATABASE_URL_UNPOOLED")
+// }
 
 model User {
   id             Int      @id @default(autoincrement())
@@ -27,7 +36,10 @@ model Playlist {
   id          Int      @id @default(autoincrement())
   name        String
   description String?
-  tracks      Json     @default("[]")
+  // SQLite: String (JSON stringified)
+  // PostgreSQL: Json (native)
+  // Change to `Json` when deploying to Vercel
+  tracks      String   @default("[]")
   isPublic    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

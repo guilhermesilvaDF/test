@@ -5,6 +5,7 @@ import itunesService from './itunes';
 import usePreviewStore from '../stores/previewStore';
 import useListeningHistoryStore from '../stores/listeningHistoryStore';
 import useAuthStore from '../stores/authStore';
+import useToastStore from '../stores/toastStore';
 import { aiAPI } from './api';
 
 class RecommendationService {
@@ -55,7 +56,7 @@ class RecommendationService {
                         lastfmService.getTopArtists(lastfmUser, 5, '7day')
                     ]);
                     context.albums = albums.map(a => `${a.name} by ${a.artist?.name || a.artist}`);
-                    const genrePromises = artists.slice(0, 3).map(artist => 
+                    const genrePromises = artists.slice(0, 3).map(artist =>
                         lastfmService.getArtistTags(artist.name).then(tags => tags[0]?.name).catch(() => null)
                     );
                     const genres = await Promise.all(genrePromises);
@@ -74,6 +75,12 @@ class RecommendationService {
             throw new Error(res.message || 'AI generation failed');
         } catch (error) {
             console.error('AI Recommendation Error:', error);
+
+            // Show warning to user that AI quota is exceeded
+            useToastStore.getState().warning(
+                'Quota de IA excedida. Usando recomendações básicas (menos precisas).'
+            );
+
             // Fallback to traditional method
             return this.getRecommendations(prompt, limit);
         }
@@ -126,6 +133,79 @@ class RecommendationService {
         return cleaned.replace(/\s+/g, ' ').trim();
     }
 
+    // Portuguese to English mood translation dictionary
+    moodTranslations = {
+        // Emotions
+        'triste': 'sad', 'tristes': 'sad', 'tristeza': 'melancholic',
+        'alegre': 'happy', 'alegres': 'happy', 'feliz': 'happy', 'felizes': 'happy',
+        'calma': 'chill', 'calmas': 'chill', 'tranquila': 'calm', 'tranquilas': 'calm',
+        'animada': 'upbeat', 'animadas': 'upbeat', 'energética': 'energetic',
+        'romântica': 'romantic', 'românticas': 'romantic', 'amor': 'love',
+        'relaxante': 'relaxing', 'relaxantes': 'relaxing',
+        'melancólica': 'melancholic', 'melancólicas': 'melancholic',
+        'nostálgica': 'nostalgic', 'nostálgicas': 'nostalgic',
+        'raiva': 'angry', 'zangada': 'angry', 'irritada': 'angry',
+        'motivacional': 'motivational', 'motivadora': 'motivational',
+        'esperançosa': 'hopeful', 'otimista': 'optimistic',
+        'sombria': 'dark', 'sombrio': 'dark', 'pesadelo': 'dark',
+        'assustadora': 'scary', 'terror': 'horror',
+        'épica': 'epic', 'épico': 'epic', 'grandiosa': 'epic',
+        'sensual': 'sensual', 'sexy': 'sexy', 'provocante': 'seductive',
+        'divertida': 'fun', 'engraçada': 'funny',
+        'emocional': 'emotional', 'emocionante': 'emotional',
+        'introspectiva': 'introspective', 'reflexiva': 'reflective',
+        'angustiante': 'anxious', 'ansiosa': 'anxious',
+        'pacífica': 'peaceful', 'serena': 'serene',
+        'eufórica': 'euphoric', 'extática': 'ecstatic',
+
+        // Activities
+        'treino': 'workout', 'malhar': 'workout', 'academia': 'gym',
+        'estudo': 'study', 'estudar': 'study', 'foco': 'focus',
+        'festa': 'party', 'dançar': 'dance', 'balada': 'party',
+        'dormir': 'sleep', 'relaxar': 'relax', 'meditação': 'meditation',
+        'trabalho': 'work', 'concentração': 'focus',
+        'corrida': 'running', 'correr': 'running',
+        'yoga': 'yoga', 'pilates': 'workout',
+        'dirigir': 'driving', 'road trip': 'road trip',
+        'jantar': 'dinner', 'cozinhar': 'cooking',
+        'leitura': 'reading', 'ler': 'reading',
+        'praia': 'beach', 'piscina': 'pool',
+        'churrasco': 'bbq', 'bar': 'bar',
+        'viagem': 'travel', 'viajar': 'travel',
+
+        // Times/Contexts
+        'noite': 'night', 'noturna': 'night', 'noturnas': 'night',
+        'dia': 'day', 'manhã': 'morning', 'madrugada': 'late night',
+        'tarde': 'afternoon', 'entardecer': 'sunset',
+        'verão': 'summer', 'inverno': 'winter',
+        'primavera': 'spring', 'outono': 'autumn',
+        'chuva': 'rainy', 'chuvoso': 'rainy', 'tempestade': 'storm',
+        'sol': 'sunny', 'ensolarado': 'sunny',
+        'fim de semana': 'weekend', 'sexta': 'friday',
+        'natal': 'christmas', 'ano novo': 'new year',
+
+        // Intensity/Style
+        'suave': 'soft', 'suaves': 'soft', 'delicada': 'gentle',
+        'pesada': 'heavy', 'pesadas': 'heavy', 'intenso': 'intense',
+        'rápida': 'fast', 'rápidas': 'fast', 'acelerada': 'fast',
+        'lenta': 'slow', 'lentas': 'slow', 'devagar': 'slow',
+        'barulhenta': 'loud', 'alta': 'loud',
+        'baixa': 'quiet', 'silenciosa': 'quiet',
+        'poderosa': 'powerful', 'forte': 'powerful',
+        'minimalista': 'minimal', 'simples': 'simple',
+        'complexa': 'complex', 'experimental': 'experimental',
+
+        // Genres/Vibes (Portuguese terms)
+        'sertanejo': 'sertanejo', 'forró': 'forro', 'bossa nova': 'bossa nova',
+        'mpb': 'mpb', 'samba': 'samba', 'pagode': 'pagode',
+        'funk': 'funk carioca', 'trap': 'trap', 'phonk': 'phonk',
+        'lofi': 'lofi', 'lo-fi': 'lofi', 'beats': 'beats',
+        'clássica': 'classical', 'clássico': 'classical',
+        'eletrônica': 'electronic', 'techno': 'techno',
+        'gospel': 'gospel', 'worship': 'worship',
+        'infantil': 'kids', 'criança': 'kids'
+    };
+
     async parsePrompt(prompt) {
         const lowerPrompt = prompt.toLowerCase().trim();
         const trackPatterns = [
@@ -151,20 +231,21 @@ class RecommendationService {
             'metal', 'folk', 'country', 'blues', 'reggae', 'punk', 'soul', 'funk',
             'disco', 'house', 'techno', 'ambient', 'classical', 'edm', 'r&b', 'rnb',
             'alternative', 'grunge', 'psychedelic', 'progressive', 'hardcore', 'ska',
-            'gospel', 'latin', 'world', 'experimental', 'noise', 'drone', 'shoegaze'
+            'gospel', 'latin', 'world', 'experimental', 'noise', 'drone', 'shoegaze', 'instrumental'
         ];
 
         if (genreKeywords.some(genre => lowerPrompt.includes(genre))) {
             return { type: 'genre', value: prompt };
         }
 
-        // AUTO-DETECT: tentar buscar como música
+        // AUTO-DETECT: Try to search as song/artist first (priority)
         try {
             const trackSearch = await lastfmService.searchTrack(prompt, 3);
             const trackResults = trackSearch.tracks || trackSearch;
             if (trackResults.length > 0) {
                 const topTrack = trackResults[0];
                 const listeners = parseInt(topTrack.listeners || 0);
+                // If it's a popular track/artist (>100k listeners), it's NOT a mood keyword
                 if (listeners > 100000) {
                     return {
                         type: 'track',
@@ -176,6 +257,20 @@ class RecommendationService {
             }
         } catch (error) {
             // Silent fail
+        }
+
+        // Check if prompt contains Portuguese mood keywords
+        let translatedMood = null;
+        for (const [ptWord, enWord] of Object.entries(this.moodTranslations)) {
+            if (lowerPrompt.includes(ptWord)) {
+                translatedMood = enWord;
+                console.log(`[ParsePrompt] Translated PT mood "${ptWord}" -> "${enWord}"`);
+                break;
+            }
+        }
+
+        if (translatedMood) {
+            return { type: 'genre', value: translatedMood };
         }
 
         return { type: 'artist', value: prompt };
@@ -210,13 +305,13 @@ class RecommendationService {
                     // Spotify genres must match exactly their list, so this is risky.
                     // Fallback: search for a playlist/track of that genre or trust the user input if valid
                     // For now, simpler to use search for a "genre" track/artist or fallback to Last.fm for pure genre
-                    seedGenres.push(value.toLowerCase().replace(/\s+/g, '-')); 
+                    seedGenres.push(value.toLowerCase().replace(/\s+/g, '-'));
                 }
 
                 if (seedArtists.length > 0 || seedTracks.length > 0 || seedGenres.length > 0) {
                     console.log(`[Recs] Using Spotify API with seeds:`, { seedArtists, seedTracks, seedGenres });
                     const spotifyRecs = await spotifyService.getRecommendations(seedArtists, seedTracks, seedGenres, limit);
-                    
+
                     if (spotifyRecs.length > 0) {
                         return spotifyRecs.map(t => ({
                             id: t.id,
@@ -249,7 +344,20 @@ class RecommendationService {
                     lastfmTracks = await this.getRecommendationsByTrackSearch(value, limit);
                 }
             } else if (type === 'genre') {
-                lastfmTracks = await this.getRecommendationsByGenre(value, limit);
+                // BR GENRE OVERRIDE: Use curated Artist Seeds to avoid generic/international tag issues
+                const lowerValue = value.toLowerCase();
+                const BR_GENRE_SEEDS = {
+                    'funk carioca': ['Anitta', 'Ludmilla', 'MC Kevin o Chris', 'Dennis DJ', 'Pedro Sampaio', 'MC Hariel']
+                };
+
+                if (BR_GENRE_SEEDS[lowerValue]) {
+                    const seeds = BR_GENRE_SEEDS[lowerValue];
+                    const randomSeed = seeds[Math.floor(Math.random() * seeds.length)];
+                    console.log(`[Genre Override] '${value}' ambiguous -> Using seed artist: ${randomSeed}`);
+                    lastfmTracks = await this.getRecommendationsByArtist(randomSeed, limit);
+                } else {
+                    lastfmTracks = await this.getRecommendationsByGenre(value, limit);
+                }
             }
 
             const enrichedTracks = await this.enrichWithSpotify(lastfmTracks);
@@ -694,7 +802,7 @@ class RecommendationService {
         try {
             // 1. Get Top Artists (Spotify Priority)
             let topArtists = [];
-            
+
             if (spotifyService.isConnected()) {
                 const spotifyTop = await spotifyService.getTopArtists(5, 'short_term');
                 topArtists = spotifyTop.map(a => ({ name: a.name, id: a.id }));
@@ -723,7 +831,7 @@ class RecommendationService {
             // Fallback to Last.fm Similarity Graph
             const allTracks = [];
             const seenArtists = new Set(topArtists.map(a => a.name.toLowerCase()));
-            
+
             // 2. For each top artist, get similar artists
             const promises = topArtists.map(async (artist) => {
                 try {

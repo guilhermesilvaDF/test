@@ -1,4 +1,5 @@
 import genAI from '../config/genai.js';
+import lastfmService from './lastfmService.js';
 
 const buildError = (message, status = 400) => {
     const err = new Error(message);
@@ -6,6 +7,176 @@ const buildError = (message, status = 400) => {
     return err;
 };
 
+/**
+ * System instructions - Code A's algorithm as instructions for Gemini
+ */
+const RECOMMENDATION_ALGORITHM_INSTRUCTIONS = `
+You are a music recommendation strategist that analyzes user prompts and creates a search strategy.
+
+# YOUR TASK: Parse the user's prompt and determine the recommendation strategy
+
+## STEP 1: CLASSIFY THE PROMPT TYPE
+
+Analyze the user's prompt and classify it as one of:
+
+**ARTIST SEARCH:**
+- User mentions an artist/band name (e.g., "songs like Radiohead", "music similar to Taylor Swift")
+- Intent: find music from similar artists
+- Extract: artist name
+
+**TRACK SEARCH:**  
+- User mentions a specific song (e.g., "Creep by Radiohead", "songs like Bohemian Rhapsody")
+- Patterns: "[track] by [artist]", "[track] - [artist]", "songs like [track]"
+- Intent: find similar-sounding tracks
+- Extract: track name, artist name (if provided)
+
+**GENRE/MOOD SEARCH:**
+- User mentions a genre, mood, or vibe (e.g., "indie rock", "chill study music", "upbeat 80s")
+- Includes: genre names, moods (chill, upbeat, sad), activities (workout, study), decades
+- Intent: find tracks matching that style/vibe
+- Extract: genre/tag/mood descriptor
+
+If the prompt is ambiguous or conversational, choose the most likely intent.
+
+## STEP 2: RETURN THE STRATEGY
+
+Return a JSON object with the search strategy. Examples:
+
+**For "songs like Radiohead":**
+{
+  "type": "artist",
+  "searchTerm": "Radiohead",
+  "explanation": "User wants similar artists to Radiohead"
+}
+
+**For "Creep by Radiohead" or "songs like Creep":**
+{
+  "type": "track", 
+  "trackName": "Creep",
+  "artistName": "Radiohead",
+  "explanation": "User wants tracks similar to Creep"
+}
+
+**For "chill indie vibes" or "upbeat 80s rock":**
+{
+  "type": "genre",
+  "searchTerm": "indie",
+  "modifier": "chill",
+  "explanation": "User wants chill indie music"
+}
+
+CRITICAL: Return ONLY valid JSON, no other text.
+`.trim();
+
+/**
+ * Code A's filtering utilities
+ */
+class RecommendationFilters {
+    /**
+     * Normalize string for comparison (Code A's normalizeString)
+     */
+    static normalizeString(str) {
+        if (!str) return '';
+        return str.toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .trim();
+    }
+
+    /**
+     * Clean track name (Code A's cleanTrackName)
+     */
+    static cleanTrackName(name) {
+        if (!name) return '';
+        let cleaned = name;
+
+        // Remove production credits, features, etc.
+        cleaned = cleaned.replace(/\s(prod\.|feat\.|ft\.|with).*/gi, '');
+
+        // Remove square brackets (metadata)
+        cleaned = cleaned.replace(/\[.*?\]/g, '');
+
+        // Remove garbage patterns
+        cleaned = cleaned
+            .replace(/\*\*.*?\*\*/g, '')
+            .replace(/EP OUT NOW/gi, '')
+            .replace(/\(LQ\)/gi, '')
+            .replace(/\(HQ\)/gi, '');
+
+        // Remove parentheses with specific keywords
+        const keywords = ['prod', 'feat', 'ft', 'bootleg', 'remix', 'edit', 'demo',
+            'version', 'slowed', 'reverb', 'mix', 'vip', 'live', 'session'];
+        const noiseRegex = new RegExp(`\\(.*?\\b(?:${keywords.join('|')})\\b.*?\\)`, 'gi');
+        cleaned = cleaned.replace(noiseRegex, '');
+
+        // Remove dates
+        cleaned = cleaned.replace(/\d{2}\.\d{2}\.\d{4}/g, '');
+        cleaned = cleaned.replace(/\d{4}/g, '');
+
+        // Remove part numbers
+        cleaned = cleaned.replace(/\bp\d+\b/gi, '');
+        cleaned = cleaned.replace(/\bpt\.?\s*\d+\b/gi, '');
+        cleaned = cleaned.replace(/\bpart\s*\d+\b/gi, '');
+
+        // Remove trailing dash garbage
+        cleaned = cleaned.replace(/\s+-\s+.*$/, '');
+
+        return cleaned.replace(/\s+/g, ' ').trim();
+    }
+
+    /**
+     * Deduplicate tracks (Code A's deduplicateTracks)
+     */
+    static deduplicateTracks(tracks) {
+        const seen = new Map();
+        const unique = [];
+
+        for (const track of tracks) {
+            const key = `${this.normalizeString(track.name)}_${this.normalizeString(track.artist)}`;
+            if (!seen.has(key)) {
+                seen.set(key, true);
+                unique.push(track);
+            }
+        }
+
+        return unique;
+    }
+
+    /**
+     * Apply diversity filter (Code A's applyDiversityFilter)
+     */
+    static applyDiversityFilter(tracks, maxPerArtist = 2) {
+        const artistCounts = {};
+        const filtered = [];
+
+        for (const track of tracks) {
+            const artist = this.normalizeString(track.artist);
+            const count = artistCounts[artist] || 0;
+
+            if (count < maxPerArtist) {
+                artistCounts[artist] = count + 1;
+                filtered.push(track);
+            }
+        }
+
+        return filtered;
+    }
+
+    /**
+     * Shuffle array (Code A's shuffleArray)
+     */
+    static shuffleArray(array) {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    }
+}
+
+/**
+ * Enhanced recommendation service using Gemini + Last.fm hybrid approach
+ */
 export const generateRecommendations = async ({ prompt, limit = 20, context = {} }) => {
     if (!genAI) throw buildError('AI Service not configured', 503);
     if (!prompt || typeof prompt !== 'string') throw buildError('Valid prompt is required', 400);
@@ -13,52 +184,30 @@ export const generateRecommendations = async ({ prompt, limit = 20, context = {}
     prompt = prompt.trim().substring(0, 500);
     limit = Math.min(Math.max(parseInt(limit, 10) || 20, 5), 50);
 
-    const { genres = [], albums = [], recentSongs = [] } = context;
-    const safeGenres = Array.isArray(genres) ? genres.slice(0, 5).map((s) => String(s).substring(0, 50)) : [];
-    const safeAlbums = Array.isArray(albums) ? albums.slice(0, 5).map((s) => String(s).substring(0, 100)) : [];
-    const safeRecent = Array.isArray(recentSongs) ? recentSongs.slice(0, 5).map((s) => String(s).substring(0, 100)) : [];
-
-    let contextPrompt = '';
-    if (safeGenres.length || safeAlbums.length || safeRecent.length) {
-        contextPrompt = `\n\nUser Context (Musical History):
-            ${safeGenres.length ? `- Top Genres: ${safeGenres.join(', ')}` : ''}
-            ${safeAlbums.length ? `- Recent/Top Albums: ${safeAlbums.join(', ')}` : ''}
-            ${safeRecent.length ? `- Recently Played: ${safeRecent.join(', ')}` : ''}
-            \n            Use this context to influence the vibe of the recommendations while strictly following the user's prompt.`;
-    }
-
+    // STEP 1: Use Gemini to parse the prompt intelligently
     const response = await genAI.models.generateContent({
-        model: 'gemini-flash-lite-latest',
+        model: 'gemini-2.0-flash-exp',
         config: {
             responseMimeType: 'application/json',
             responseSchema: {
-                type: 'ARRAY',
-                items: {
-                    type: 'OBJECT',
-                    properties: {
-                        name: { type: 'STRING' },
-                        artist: { type: 'STRING' },
-                        reason: { type: 'STRING' },
-                    },
+                type: 'OBJECT',
+                properties: {
+                    type: { type: 'STRING', enum: ['artist', 'track', 'genre'] },
+                    searchTerm: { type: 'STRING' },
+                    trackName: { type: 'STRING', nullable: true },
+                    artistName: { type: 'STRING', nullable: true },
+                    modifier: { type: 'STRING', nullable: true },
+                    explanation: { type: 'STRING' }
                 },
+                required: ['type', 'explanation']
             },
         },
-        contents: [
-            {
-                role: 'user',
-                parts: [
-                    {
-                        text: `Act as a music expert DJ. Based on the following prompt, suggest ${limit} song recommendations: "${prompt}".${contextPrompt}
-
-Rules:
-1. For the 'reason' field, describe the song's actual sound, mood, or instrumentals (e.g., "Sintetizadores sonhadores", "Riffs de guitarra agressivos", "Ritmo funk animado").
-2. Do NOT say "Because you liked..." or "Similar to...". Focus on the music itself.
-3. Keep the reason under 6 words.
-4. The reason MUST be in Portuguese.`,
-                    },
-                ],
-            },
-        ],
+        contents: [{
+            role: 'user',
+            parts: [{
+                text: `${RECOMMENDATION_ALGORITHM_INSTRUCTIONS}\n\nUser prompt: "${prompt}"\n\nAnalyze and return the strategy.`
+            }]
+        }]
     });
 
     const candidates = response.response?.candidates || response.candidates;
@@ -66,17 +215,136 @@ Rules:
         throw buildError('Invalid response from Gemini API', 500);
     }
 
-    const text = candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
-    return JSON.parse(text);
+    const strategyText = candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+    const strategy = JSON.parse(strategyText);
+
+    console.log('[Enhanced AI] Strategy:', strategy);
+
+    // STEP 2: Execute Last.fm queries based on Gemini's strategy
+    let lastfmTracks = [];
+
+    try {
+        if (strategy.type === 'artist') {
+            lastfmTracks = await getRecommendationsByArtist(strategy.searchTerm, limit * 3);
+        } else if (strategy.type === 'track') {
+            lastfmTracks = await getRecommendationsByTrack(
+                strategy.trackName || strategy.searchTerm,
+                strategy.artistName,
+                limit * 3
+            );
+        } else if (strategy.type === 'genre') {
+            lastfmTracks = await getRecommendationsByGenre(
+                strategy.searchTerm,
+                strategy.modifier,
+                limit * 3
+            );
+        }
+    } catch (error) {
+        console.error('[Last.fm Error]', error);
+        throw buildError('Failed to fetch music recommendations', 500);
+    }
+
+    // STEP 3: Apply Code A's filtering algorithm
+    let filtered = RecommendationFilters.deduplicateTracks(lastfmTracks);
+    filtered = RecommendationFilters.applyDiversityFilter(filtered, 2);
+    filtered = RecommendationFilters.shuffleArray(filtered);
+    filtered = filtered.slice(0, limit);
+
+    // STEP 4: Return enriched results
+    // Note: Frontend or additional service should enrich with Spotify/album art
+    return filtered.map(track => ({
+        name: track.name,
+        artist: track.artist,
+        reason: strategy.explanation || 'Recommended based on your taste'
+    }));
 };
 
+/**
+ * Get recommendations by artist (Code A's algorithm)
+ */
+async function getRecommendationsByArtist(artistName, limit) {
+    const normSearchArtist = RecommendationFilters.normalizeString(artistName);
+
+    // Get similar artists
+    const similarArtists = await lastfmService.getSimilarArtists(artistName, 60);
+
+    // Filter out the original artist
+    const filteredSimilar = similarArtists.filter(a => {
+        const norm = RecommendationFilters.normalizeString(a.name);
+        return norm !== normSearchArtist && !norm.includes(normSearchArtist);
+    });
+
+    // Select 20 random artists for variety
+    const selectedArtists = RecommendationFilters.shuffleArray(filteredSimilar).slice(0, 20);
+
+    // Get tracks from each artist (pages 2-10 for variety)
+    const promises = selectedArtists.map(async (artist) => {
+        const randomPage = Math.floor(Math.random() * 9) + 2; // Pages 2-10
+        const tracks = await lastfmService.getTopTracksByArtist(artist.name, 20, randomPage);
+        return RecommendationFilters.shuffleArray(tracks).slice(0, 3);
+    });
+
+    const allTracks = (await Promise.all(promises)).flat();
+
+    // Filter out original artist's tracks
+    return allTracks.filter(track => {
+        const normTrackArtist = RecommendationFilters.normalizeString(track.artist);
+        return normTrackArtist !== normSearchArtist && !normTrackArtist.includes(normSearchArtist);
+    });
+}
+
+/**
+ * Get recommendations by track (Code A's algorithm)
+ */
+async function getRecommendationsByTrack(trackName, artistName, limit) {
+    try {
+        // If no artist provided, search for the track first
+        if (!artistName) {
+            const searchResults = await lastfmService.searchTrack(trackName, 5);
+            if (searchResults.length > 0) {
+                trackName = searchResults[0].name;
+                artistName = searchResults[0].artist;
+            } else {
+                // Fallback to artist search with the track name
+                return getRecommendationsByArtist(trackName, limit);
+            }
+        }
+
+        const normSearchArtist = RecommendationFilters.normalizeString(artistName);
+
+        // Get similar tracks
+        const similarTracks = await lastfmService.getSimilarTracks(trackName, artistName, 60);
+
+        // Filter out original artist
+        return similarTracks.filter(track => {
+            const normTrackArtist = RecommendationFilters.normalizeString(track.artist);
+            return normTrackArtist !== normSearchArtist && !normTrackArtist.includes(normSearchArtist);
+        });
+    } catch (error) {
+        console.error('[Track Search Error]', error);
+        // Fallback to artist search
+        return artistName ? getRecommendationsByArtist(artistName, limit) : [];
+    }
+}
+
+/**
+ * Get recommendations by genre/mood (Code A's algorithm)
+ */
+async function getRecommendationsByGenre(genre, modifier, limit) {
+    // Random page for variety
+    const randomPage = Math.floor(Math.random() * 5) + 1;
+    const tracks = await lastfmService.getTopTracksByTag(genre, 100, randomPage);
+    return RecommendationFilters.shuffleArray(tracks);
+}
+
+// Export other existing AI functions (keep backward compatibility)
 export const analyzeTaste = async ({ topArtists = [], topTracks = [] }) => {
     if (!genAI) throw buildError('AI Service not configured', 503);
 
     const artistsStr = topArtists.slice(0, 15).map((a) => a.name).join(', ');
 
     const response = await genAI.models.generateContent({
-        model: 'gemini-flash-lite-latest',
+        model: 'gemini-2.0-flash-exp',
         config: {
             responseMimeType: 'application/json',
             responseSchema: {
@@ -88,12 +356,10 @@ export const analyzeTaste = async ({ topArtists = [], topTracks = [] }) => {
                 },
             },
         },
-        contents: [
-            {
-                role: 'user',
-                parts: [{ text: `Analyze the musical taste of a user who listens to these artists: ${artistsStr}.` }],
-            },
-        ],
+        contents: [{
+            role: 'user',
+            parts: [{ text: `Analyze the musical taste of a user who listens to these artists: ${artistsStr}.` }],
+        }],
     });
 
     const candidates = response.response?.candidates || response.candidates;
@@ -109,16 +375,16 @@ export const analyzeTaste = async ({ topArtists = [], topTracks = [] }) => {
 export const describePlaylist = async ({ name, tracks = [] }) => {
     if (!genAI) throw buildError('AI Service not configured', 503);
 
-    const trackList = tracks.slice(0, 5).map((t) => `${t.name} - ${t.artist}`).join(', ');
+    const tracksStr = tracks.slice(0, 20).map(t => `${t.name} by ${t.artist}`).join(', ');
 
     const response = await genAI.models.generateContent({
-        model: 'gemini-flash-lite-latest',
-        contents: [
-            {
-                role: 'user',
-                parts: [{ text: `Write a short, catchy, 1-sentence description for a playlist named "${name}" containing songs like: ${trackList}. Language: Portuguese.` }],
-            },
-        ],
+        model: 'gemini-2.0-flash-exp',
+        contents: [{
+            role: 'user',
+            parts: [{
+                text: `Create a brief, engaging description (2-3 sentences) for a playlist named "${name}" containing these tracks: ${tracksStr}.`
+            }]
+        }]
     });
 
     const candidates = response.response?.candidates || response.candidates;
@@ -126,5 +392,5 @@ export const describePlaylist = async ({ name, tracks = [] }) => {
         throw buildError('Invalid response from Gemini API', 500);
     }
 
-    return { description: candidates[0].content.parts[0].text.trim() };
+    return candidates[0].content.parts[0].text.trim();
 };

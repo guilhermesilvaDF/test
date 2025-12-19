@@ -16,9 +16,9 @@ function Search() {
     const [playlistName, setPlaylistName] = useState('');
     const [showToast, setShowToast] = useState(false);
     const [newBadges, setNewBadges] = useState([]);
-    
+
     const searchIdRef = useRef(0);
-    
+
     const addPlaylist = usePlaylistStore(state => state.addPlaylist);
     const { trackSearch, trackTracksDiscovered, trackPlaylistCreated } = useGamificationStore();
 
@@ -29,14 +29,14 @@ function Search() {
         setIsLoading(true);
         setError(null);
         setRecommendations([]);
-        
+
         // Increment search ID to invalidate previous enrichment
         const currentSearchId = ++searchIdRef.current;
-        
+
         try {
             // Search and enrich using the robust recommendation service
             const tracks = await recommendationService.searchAndEnrich(searchQuery, 25);
-            
+
             if (searchIdRef.current === currentSearchId) {
                 setRecommendations(tracks);
 
@@ -128,7 +128,7 @@ function Search() {
                         <section>
                             <div className="flex justify-between items-center mb-6">
                                 <h2 className="text-2xl font-semibold text-white">
-                                    {recommendations.length} recomendações encontradas
+                                    {recommendations.length} músicas encontradas
                                 </h2>
                                 <button
                                     onClick={() => setShowPlaylistModal(true)}
